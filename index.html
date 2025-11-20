@@ -37,7 +37,7 @@
             50% { transform: translate(-3px, -3px); }
             100% { transform: translate(3px, 3px); }
         }
-        /* [레이아웃 변경] 좌우 패널 스타일 */
+        /* 좌우 패널 스타일 */
         .side-panel {
             width: 150px;
             display: flex;
@@ -63,6 +63,7 @@
             color: #ffcc00;
             margin-bottom: 10px;
             text-align: center;
+            /* [라인 수 표시 강화] 이 부분을 수정하여 라인 수 포맷 변경 */
         }
         #start-button, #restart-button {
             padding: 15px 30px;
@@ -74,10 +75,10 @@
             border-radius: 8px;
             transition: background-color 0.3s;
             margin-top: 20px;
-            display: none; /* 초기에는 숨김 또는 표시 상태에 따라 달라짐 */
+            display: none;
         }
         #restart-button {
-            background-color: #FF5733; /* 재시작 버튼 색상 */
+            background-color: #FF5733;
         }
         #start-button:hover, #restart-button:hover {
             background-color: #45a049;
@@ -92,7 +93,7 @@
     </style>
 </head>
 <body>
-    <div id="game-status">점수: 0 | 라인: 0</div>
+    <div id="game-status">점수: 0 | LINES: 0</div>
 
     <div id="game-container">
         <div id="left-panel" class="side-panel">
@@ -135,7 +136,6 @@
         const KEY_INITIAL_DELAY = 150;
         const KEY_REPEAT_RATE = 50;  
         
-        // Canvas 및 Context 설정
         const canvas = document.getElementById('tetris-board');
         const boardWrapper = document.getElementById('board-wrapper');
         const ctx = canvas.getContext('2d');
@@ -157,7 +157,6 @@
             { shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]], color: '#FF0000' }
         ];
 
-        // 게임 상태 변수
         let board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
         let currentPiece = null;
         let nextPiece = null;
@@ -165,9 +164,10 @@
         let holdUsed = false;
         let currentX = 0;
         let currentY = 0;
-        let gameRunning = false; // **[시작 버튼]** 초기에는 false로 설정
+        let gameRunning = false; 
         let score = 0;
         let lines = 0;
+        let combo = 0; // **[콤보 기능]** 콤보 횟수 변수 추가
         let dropInterval = 1000;
         let lastDropTime = 0;
         let lockTimeout = null;
@@ -292,14 +292,22 @@
                     }
                 }
             }
+            
+            // **[콤보 표시]**
+            if (gameRunning && combo > 1) {
+                ctx.fillStyle = '#FFD700'; // 금색
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`COMBO x ${combo}`, canvas.width / 2, canvas.height / 3);
+            }
 
             // 사이드 패널 업데이트
             drawSidePiece(nextCtx, nextPiece);
             drawSidePiece(holdCtx, heldPiece);
 
-            // **[라인 수 지속 표시]** gameRunning 상태와 관계없이 표시
+            // **[라인 수 표시 강화]**
             document.getElementById('game-status').textContent = 
-                `점수: ${score} | 라인: ${lines} ${!gameRunning && (score > 0 || lines > 0) ? ' | GAME OVER!' : ''}`;
+                `점수: ${score} | LINES: ${lines} ${!gameRunning && (score > 0 || lines > 0) ? ' | GAME OVER!' : ''}`;
             
             document.getElementById('restart-button').style.display = !gameRunning && (score > 0 || lines > 0) ? 'block' : 'none';
         }
@@ -404,7 +412,21 @@
                     }
                 }
             }
-            checkClearLines();
+            
+            const clearedLines = checkClearLines(); // 지운 라인 수 반환 받음
+
+            if (clearedLines > 0) {
+                // 라인을 지웠으면 콤보 증가
+                combo++;
+                // 콤보 점수 추가 (예시: 콤보 * 50점 추가)
+                if (combo > 1) {
+                    score += combo * 50; 
+                }
+            } else {
+                // 라인을 못 지웠으면 콤보 초기화
+                combo = 0;
+            }
+            
             score += 10;
             
             if (linesToClear.length === 0) { 
@@ -458,6 +480,9 @@
             draw();
         }
 
+        /**
+         * 줄 제거 및 이펙트 발생. 지운 라인 수를 반환합니다.
+         */
         function checkClearLines() {
             let clearedCount = 0;
             linesToClear = [];
@@ -473,7 +498,6 @@
                 boardWrapper.classList.add('shake');
                 clearStartTime = Date.now();
 
-                // 화면 깜빡임 수정
                 draw(); 
                 
                 setTimeout(() => {
@@ -499,6 +523,8 @@
                     generatePiece();
                 }, LINE_CLEAR_DURATION);
             }
+            
+            return clearedCount; // 지운 라인 수 반환
         }
 
         // ===================================
@@ -510,7 +536,6 @@
             
             let moved = false;
             
-            // 회전 처리 (W/R/ArrowUp)
             if (keysPressed['w'] || keysPressed['r'] || keysPressed['arrowup']) {
                 if (rotatePiece()) {
                     moved = true; 
@@ -518,14 +543,12 @@
                 keysPressed['w'] = keysPressed['r'] = keysPressed['arrowup'] = false; 
             }
             
-            // 홀드 처리 (Shift)
             if (keysPressed['shift']) {
                 holdPiece();
                 keysPressed['shift'] = false;
                 return;
             }
             
-            // 하드 드롭 처리 (Space)
             if (keysPressed[' ']) {
                 while (isValidMove(currentX, currentY + 1, currentPiece.shape)) {
                     currentY++;
@@ -535,7 +558,6 @@
                 return;
             }
             
-            // 수평 이동 처리
             let newX = currentX;
             if (keysPressed['a'] || keysPressed['arrowleft']) {
                 newX = currentX - 1;
@@ -543,13 +565,11 @@
                 newX = currentX + 1;
             }
 
-            // 소프트 드롭 처리
             let newY = currentY;
             if (keysPressed['s'] || keysPressed['arrowdown']) {
                 newY = currentY + 1;
             }
             
-            // 이동 유효성 확인 및 락 타이머 재설정
             const isValidHMove = isValidMove(newX, currentY, currentPiece.shape);
             const isValidVMove = isValidMove(currentX, newY, currentPiece.shape);
 
@@ -597,18 +617,14 @@
             animationFrameId = requestAnimationFrame(gameLoop);
         }
 
-        /**
-         * [시작 버튼] 게임을 완전히 초기화하고 시작합니다.
-         */
         function startGame() {
-            // 버튼 숨기기/보이기
             document.getElementById('start-button').style.display = 'none';
             document.getElementById('restart-button').style.display = 'none';
 
-            // 상태 초기화
             board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
             score = 0;
             lines = 0;
+            combo = 0; // 콤보 초기화
             gameRunning = true;
             lastDropTime = 0;
             currentPiece = null;
@@ -634,7 +650,7 @@
         // -----------------------------------
 
         document.addEventListener('keydown', (e) => {
-            if (!gameRunning) return; // 게임 실행 중일 때만 조작 허용
+            if (!gameRunning) return;
 
             const key = e.key.toLowerCase();
             if (e.key === ' ' || e.key === 'Shift') e.preventDefault(); 
@@ -670,12 +686,12 @@
         });
         
         document.getElementById('start-button').addEventListener('click', startGame);
-        document.getElementById('restart-button').addEventListener('click', startGame); // 재시작 버튼도 startGame 함수를 사용
+        document.getElementById('restart-button').addEventListener('click', startGame);
 
         // 초기 화면 설정
-        drawSidePiece(nextCtx, getRandomTetromino()); // 시작 전 다음 블록 미리보기
-        document.getElementById('start-button').style.display = 'block'; // 시작 버튼 표시
-        draw(); // 초기 보드 상태 그리기 (빈 보드와 초기 NEXT 블록)
+        drawSidePiece(nextCtx, getRandomTetromino()); 
+        document.getElementById('start-button').style.display = 'block'; 
+        draw(); 
     </script>
 </body>
 </html>
