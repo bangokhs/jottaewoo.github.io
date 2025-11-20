@@ -53,17 +53,31 @@
             width: 100%;
             text-align: center;
         }
+        /* [라인 표시 위치 변경] 좌측 패널 전용 스타일 */
+        #left-panel {
+            justify-content: space-between; /* HOLD는 위, LINES는 아래로 */
+        }
+        #lines-display {
+            padding: 15px 10px;
+            background-color: #222;
+            border: 1px solid #555;
+            border-radius: 5px;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #00FFCC; /* 라인 수 강조 색상 */
+            margin-top: auto; /* HOLD 아래, 패널 하단에 붙이기 */
+        }
+        
         #next-piece-canvas, #hold-piece-canvas {
             border: 1px solid #555;
             display: block;
             margin: 5px auto;
         }
-        #game-status {
+        #score-display { /* 이전 game-status를 점수 전용으로 변경 */
             font-size: 1.5em;
             color: #ffcc00;
             margin-bottom: 10px;
             text-align: center;
-            /* 라인 수 포맷이 여기에 업데이트됩니다. */
         }
         #start-button, #restart-button {
             padding: 15px 30px;
@@ -93,13 +107,16 @@
     </style>
 </head>
 <body>
-    <div id="game-status">점수: 0 | LINES: 0</div>
+    <div id="score-display">점수: 0</div>
 
     <div id="game-container">
         <div id="left-panel" class="side-panel">
             <div class="panel-section">
                 <strong>HOLD</strong>
                 <canvas id="hold-piece-canvas" width="120" height="120"></canvas>
+            </div>
+             <div id="lines-display" class="panel-section">
+                LINES: 0
             </div>
         </div>
 
@@ -148,13 +165,13 @@
         const SIDE_BLOCK_SIZE = nextCanvas.width / 4;
 
         const TETROMINOES = [
-            { shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]], color: '#00FFFF' }, 
-            { shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]], color: '#0000FF' },
-            { shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]], color: '#FFA500' },
-            { shape: [[1, 1], [1, 1]], color: '#FFFF00' },
-            { shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]], color: '#00FF00' },
-            { shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]], color: '#800080' },
-            { shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]], color: '#FF0000' }
+            { shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]], color: '#00FFFF' }, // I
+            { shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]], color: '#0000FF' }, // J
+            { shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]], color: '#FFA500' }, // L
+            { shape: [[1, 1], [1, 1]], color: '#FFFF00' }, // O
+            { shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]], color: '#00FF00' }, // S
+            { shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]], color: '#800080' }, // T
+            { shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]], color: '#FF0000' } // Z
         ];
 
         let board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
@@ -166,8 +183,8 @@
         let currentY = 0;
         let gameRunning = false; 
         let score = 0;
-        let lines = 0; // **[핵심]** 지운 라인 총 수
-        let combo = 0;
+        let lines = 0; 
+        let combo = 0; 
         let dropInterval = 1000;
         let lastDropTime = 0;
         let lockTimeout = null;
@@ -305,9 +322,10 @@
             drawSidePiece(nextCtx, nextPiece);
             drawSidePiece(holdCtx, heldPiece);
 
-            // **[핵심] LINES 변수 업데이트**
-            document.getElementById('game-status').textContent = 
-                `점수: ${score} | LINES: ${lines} ${!gameRunning && (score > 0 || lines > 0) ? ' | GAME OVER!' : ''}`;
+            // 점수 및 라인 업데이트
+            document.getElementById('score-display').textContent = 
+                `점수: ${score} ${!gameRunning && (score > 0 || lines > 0) ? ' | GAME OVER!' : ''}`;
+            document.getElementById('lines-display').textContent = `LINES: ${lines}`; // **[라인 표시 위치 변경]**
             
             document.getElementById('restart-button').style.display = !gameRunning && (score > 0 || lines > 0) ? 'block' : 'none';
         }
@@ -359,7 +377,10 @@
             }
             return true;
         }
-
+        
+        /**
+         * [블록 회전 수정] 블록 회전을 시도하고, 실패 시 벽차기(Wall Kick) 이동을 시도합니다.
+         */
         function rotatePiece() {
             if (!currentPiece) return false;
 
@@ -367,21 +388,38 @@
             const N = oldShape.length;
             const newShape = Array.from({ length: N }, () => Array(N).fill(0));
 
+            // 1. 회전 계산
             for (let y = 0; y < N; y++) {
                 for (let x = 0; x < N; x++) {
                     newShape[x][N - 1 - y] = oldShape[y][x];
                 }
             }
-
+            
+            // 2. 일반 회전 시도
             if (isValidMove(currentX, currentY, newShape)) {
                 currentPiece.shape = newShape;
-                if (isLocked) {
-                    resetLockDelay(); 
-                }
+                if (isLocked) resetLockDelay(); 
                 return true;
             }
+
+            // 3. 벽차기(Wall Kick) 시도
+            // 간단하게 좌우 1~2칸 이동 후 회전 가능한지 확인
+            // I-Piece는 4x4, 나머지는 3x3이므로, 벽차기 이동 거리를 1 또는 2로 설정
+            const kickAttempts = [1, -1, 2, -2]; 
+
+            for (let kickX of kickAttempts) {
+                if (isValidMove(currentX + kickX, currentY, newShape)) {
+                    currentX += kickX;
+                    currentPiece.shape = newShape;
+                    if (isLocked) resetLockDelay(); 
+                    return true;
+                }
+            }
+            
+            // 4. 실패
             return false;
         }
+
 
         function startLockDelay() {
             clearTimeout(lockTimeout);
@@ -507,7 +545,7 @@
                         }
                     }
                     
-                    lines += clearedCount; // **[핵심]** 라인 수 업데이트
+                    lines += clearedCount; 
                     if (clearedCount === 1) score += 100;
                     else if (clearedCount === 2) score += 300;
                     else if (clearedCount === 3) score += 500;
@@ -531,7 +569,7 @@
             let moved = false;
             
             if (keysPressed['w'] || keysPressed['r'] || keysPressed['arrowup']) {
-                if (rotatePiece()) {
+                if (rotatePiece()) { // **[벽차기 회전 적용]**
                     moved = true; 
                 }
                 keysPressed['w'] = keysPressed['r'] = keysPressed['arrowup'] = false; 
@@ -617,7 +655,7 @@
 
             board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
             score = 0;
-            lines = 0; // 초기화
+            lines = 0; 
             combo = 0;
             gameRunning = true;
             lastDropTime = 0;
