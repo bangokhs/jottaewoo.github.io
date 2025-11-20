@@ -53,9 +53,8 @@
             width: 100%;
             text-align: center;
         }
-        /* [라인 표시 위치 변경] 좌측 패널 전용 스타일 */
         #left-panel {
-            justify-content: space-between; /* HOLD는 위, LINES는 아래로 */
+            justify-content: space-between;
         }
         #lines-display {
             padding: 15px 10px;
@@ -64,8 +63,8 @@
             border-radius: 5px;
             font-size: 1.2em;
             font-weight: bold;
-            color: #00FFCC; /* 라인 수 강조 색상 */
-            margin-top: auto; /* HOLD 아래, 패널 하단에 붙이기 */
+            color: #00FFCC; 
+            margin-top: auto; 
         }
         
         #next-piece-canvas, #hold-piece-canvas {
@@ -73,11 +72,17 @@
             display: block;
             margin: 5px auto;
         }
-        #score-display { /* 이전 game-status를 점수 전용으로 변경 */
+        #score-display { 
             font-size: 1.5em;
             color: #ffcc00;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             text-align: center;
+        }
+        #nickname-display { 
+            font-size: 1.1em;
+            color: #a8a8ff;
+            margin-bottom: 15px;
+            font-weight: bold;
         }
         #start-button, #restart-button {
             padding: 15px 30px;
@@ -107,6 +112,7 @@
     </style>
 </head>
 <body>
+    <div id="nickname-display"></div>
     <div id="score-display">점수: 0</div>
 
     <div id="game-container">
@@ -136,7 +142,7 @@
     <button id="restart-button" style="display: none;">RESTART GAME</button>
 
     <div id="info">
-        조작 키: **A** (좌), **D** (우), **S** (하), **W/R** (회전), **Space** (하드 드롭), **Shift** (홀드)<br>
+        조작 키: **A** (좌), **D** (우), **S** (하), **W/R/Z/X/ArrowUp** (회전), **Space** (하드 드롭), **Shift/C** (홀드)<br>
         (화면을 클릭하고 키보드를 눌러주세요.)
     </div>
     
@@ -192,6 +198,11 @@
         let linesToClear = [];
         let clearStartTime = 0;
         let animationFrameId;
+        
+        let nickname = localStorage.getItem('tetrisNickname') || 'Player'; 
+        
+        // 💥 라인 클리어 텍스트 상태
+        let lineClearText = { text: '', time: 0 }; 
 
         const keysPressed = {}; 
         let keyRepeatTimer = null; 
@@ -317,15 +328,44 @@
                 ctx.textAlign = 'center';
                 ctx.fillText(`COMBO x ${combo}`, canvas.width / 2, canvas.height / 3);
             }
+            
+            // 💥 라인 클리어 텍스트 표시 이펙트
+            if (lineClearText.text) {
+                const textDuration = 1000; // 1초 동안 표시
+                const elapsedTime = Date.now() - lineClearText.time;
+                
+                if (elapsedTime < textDuration) {
+                    const alpha = Math.max(0, 1 - elapsedTime / textDuration); // 1에서 0으로 페이드 아웃
+                    ctx.globalAlpha = alpha;
+                    
+                    ctx.textAlign = 'center';
+                    ctx.font = 'bold 50px Arial';
+                    
+                    let color = '#FF3333'; // 기본 빨간색 (DOUBLE, TRIPLE)
+                    if (lineClearText.text === 'TETRA') color = '#FFD700'; // 황금색
+
+                    ctx.fillStyle = color;
+                    
+                    const wobbleY = Math.sin(elapsedTime / 100) * 5; // 약간의 흔들림 효과
+                    
+                    ctx.fillText(lineClearText.text, canvas.width / 2, canvas.height * 0.4 + wobbleY);
+                    
+                    ctx.globalAlpha = 1.0; // 원상 복구
+                } else {
+                    lineClearText.text = ''; // 시간 지나면 제거
+                }
+            }
+
 
             // 사이드 패널 업데이트
             drawSidePiece(nextCtx, nextPiece);
             drawSidePiece(holdCtx, heldPiece);
 
             // 점수 및 라인 업데이트
+            document.getElementById('nickname-display').textContent = `닉네임: ${nickname}`;
             document.getElementById('score-display').textContent = 
                 `점수: ${score} ${!gameRunning && (score > 0 || lines > 0) ? ' | GAME OVER!' : ''}`;
-            document.getElementById('lines-display').textContent = `LINES: ${lines}`; // **[라인 표시 위치 변경]**
+            document.getElementById('lines-display').textContent = `LINES: ${lines}`; 
             
             document.getElementById('restart-button').style.display = !gameRunning && (score > 0 || lines > 0) ? 'block' : 'none';
         }
@@ -378,34 +418,32 @@
             return true;
         }
         
-        /**
-         * [블록 회전 수정] 블록 회전을 시도하고, 실패 시 벽차기(Wall Kick) 이동을 시도합니다.
-         */
-        function rotatePiece() {
-            if (!currentPiece) return false;
-
-            const oldShape = currentPiece.shape;
+        function getRotatedShape(oldShape) {
             const N = oldShape.length;
             const newShape = Array.from({ length: N }, () => Array(N).fill(0));
-
-            // 1. 회전 계산
             for (let y = 0; y < N; y++) {
                 for (let x = 0; x < N; x++) {
                     newShape[x][N - 1 - y] = oldShape[y][x];
                 }
             }
-            
-            // 2. 일반 회전 시도
-            if (isValidMove(currentX, currentY, newShape)) {
-                currentPiece.shape = newShape;
-                if (isLocked) resetLockDelay(); 
-                return true;
-            }
+            return newShape;
+        }
+        
+        function getCounterRotatedShape(oldShape) {
+            let shape = oldShape;
+            shape = getRotatedShape(shape);
+            shape = getRotatedShape(shape);
+            shape = getRotatedShape(shape);
+            return shape;
+        }
 
-            // 3. 벽차기(Wall Kick) 시도
-            // 간단하게 좌우 1~2칸 이동 후 회전 가능한지 확인
-            // I-Piece는 4x4, 나머지는 3x3이므로, 벽차기 이동 거리를 1 또는 2로 설정
-            const kickAttempts = [1, -1, 2, -2]; 
+        function rotatePiece(isClockwise = true) {
+            if (!currentPiece) return false;
+            
+            const oldShape = currentPiece.shape;
+            const newShape = isClockwise ? getRotatedShape(oldShape) : getCounterRotatedShape(oldShape);
+            
+            const kickAttempts = [0, 1, -1, 2, -2]; 
 
             for (let kickX of kickAttempts) {
                 if (isValidMove(currentX + kickX, currentY, newShape)) {
@@ -416,7 +454,6 @@
                 }
             }
             
-            // 4. 실패
             return false;
         }
 
@@ -527,6 +564,20 @@
             }
 
             if (clearedCount > 0) {
+                // 💥 클리어 타입 결정 및 텍스트 설정
+                let clearType = '';
+                if (clearedCount === 4) {
+                    clearType = 'TETRA';
+                } else if (clearedCount === 3) {
+                    clearType = 'TRIPLE';
+                } else if (clearedCount === 2) {
+                    clearType = 'DOUBLE';
+                } 
+                
+                if (clearType) {
+                    lineClearText = { text: clearType, time: Date.now() };
+                }
+
                 boardWrapper.classList.add('shake');
                 clearStartTime = Date.now();
 
@@ -566,18 +617,27 @@
         function handleInput() {
             if (!gameRunning || !currentPiece || linesToClear.length > 0) return;
             
-            let moved = false;
+            let rotated = false;
             
-            if (keysPressed['w'] || keysPressed['r'] || keysPressed['arrowup']) {
-                if (rotatePiece()) { // **[벽차기 회전 적용]**
-                    moved = true; 
+            // 시계 방향 회전 (W, R, X, ArrowUp)
+            if (keysPressed['w'] || keysPressed['r'] || keysPressed['x'] || keysPressed['arrowup']) {
+                if (rotatePiece(true)) {
+                    rotated = true; 
                 }
-                keysPressed['w'] = keysPressed['r'] = keysPressed['arrowup'] = false; 
+                keysPressed['w'] = keysPressed['r'] = keysPressed['x'] = keysPressed['arrowup'] = false; 
+            }
+            // 반시계 방향 회전 (Z)
+            else if (keysPressed['z']) {
+                if (rotatePiece(false)) {
+                    rotated = true; 
+                }
+                keysPressed['z'] = false;
             }
             
-            if (keysPressed['shift']) {
+            // 홀드 처리 (Shift, C)
+            if (keysPressed['shift'] || keysPressed['c']) {
                 holdPiece();
-                keysPressed['shift'] = false;
+                keysPressed['shift'] = keysPressed['c'] = false;
                 return;
             }
             
@@ -618,7 +678,7 @@
                 if (!isLocked) startLockDelay();
             }
 
-            if (actualMovement || moved) {
+            if (actualMovement || rotated) {
                 if (isLocked) resetLockDelay();
                 draw();
             }
@@ -666,6 +726,7 @@
             linesToClear = [];
             clearTimeout(lockTimeout);
             isLocked = false;
+            lineClearText = { text: '', time: 0 }; // 💥 초기화
             
             generatePiece(); 
             cancelAnimationFrame(animationFrameId); 
@@ -677,6 +738,25 @@
             draw();
         }
 
+        function promptForNickname() {
+            if (localStorage.getItem('tetrisNickname')) {
+                draw();
+                return;
+            }
+
+            let inputNickname = prompt("테트리스 게임에서 사용할 닉네임을 입력해주세요 (최대 10자):", "Player");
+            
+            if (inputNickname === null || inputNickname.trim() === "") {
+                inputNickname = "Player";
+            }
+            
+            inputNickname = inputNickname.trim().substring(0, 10);
+
+            nickname = inputNickname;
+            localStorage.setItem('tetrisNickname', nickname);
+            draw();
+        }
+
         // -----------------------------------
         // 이벤트 리스너 및 초기 설정
         // -----------------------------------
@@ -685,12 +765,12 @@
             if (!gameRunning) return;
 
             const key = e.key.toLowerCase();
-            if (e.key === ' ' || e.key === 'Shift') e.preventDefault(); 
+            if (e.key === ' ' || e.key === 'Shift' || key === 'c') e.preventDefault(); 
             
             if (!keysPressed[key]) {
                 keysPressed[key] = true;
                 
-                if (['w', 'r', 'arrowup', ' ', 'shift'].includes(key)) {
+                if (['w', 'r', 'x', 'z', 'arrowup', ' ', 'shift', 'c'].includes(key)) {
                     handleInput(); 
                 } else {
                     handleInput();
@@ -720,10 +800,9 @@
         document.getElementById('start-button').addEventListener('click', startGame);
         document.getElementById('restart-button').addEventListener('click', startGame);
 
-        // 초기 화면 설정
-        drawSidePiece(nextCtx, getRandomTetromino()); 
+        // 초기 화면 설정 시 닉네임 설정 함수 호출
+        promptForNickname();
         document.getElementById('start-button').style.display = 'block'; 
-        draw(); 
     </script>
 </body>
 </html>
