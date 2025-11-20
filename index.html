@@ -1,0 +1,274 @@
+// ===================================
+// 1. 게임 설정 및 데이터 구조
+// ===================================
+
+// 보드 크기 설정 (표준 10x20)
+const COLS = 10;
+const ROWS = 20;
+
+// 테트리스 블록 정의 (Tetrominoes)
+// 0은 빈 공간, 1은 블록 조각
+const SHAPES = [
+    // I (Cyan)
+    [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]],
+    // J (Blue)
+    [[1, 0, 0], [1, 1, 1], [0, 0, 0]],
+    // L (Orange)
+    [[0, 0, 1], [1, 1, 1], [0, 0, 0]],
+    // O (Yellow)
+    [[1, 1], [1, 1]],
+    // S (Green)
+    [[0, 1, 1], [1, 1, 0], [0, 0, 0]],
+    // T (Purple)
+    [[0, 1, 0], [1, 1, 1], [0, 0, 0]],
+    // Z (Red)
+    [[1, 1, 0], [0, 1, 1], [0, 0, 0]]
+];
+
+const COLORS = ['cyan', 'blue', 'orange', 'yellow', 'green', 'purple', 'red'];
+
+// 보드 초기화: 0으로 채워진 20x10 배열
+let board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+
+// 현재 플레이 중인 블록 상태
+let currentPiece = null;
+let currentX = 0;
+let currentY = 0;
+let currentColor = '';
+
+// ===================================
+// 2. 핵심 게임 로직 함수
+// ===================================
+
+/**
+ * 0. 보드 상태를 콘솔에 출력 (시각화 대체)
+ */
+function printBoard() {
+    // 현재 블록이 위치한 곳을 임시로 보드에 표시
+    let tempBoard = board.map(row => [...row]);
+    if (currentPiece) {
+        for (let y = 0; y < currentPiece.length; y++) {
+            for (let x = 0; x < currentPiece[y].length; x++) {
+                if (currentPiece[y][x] === 1) {
+                    if (currentY + y >= 0 && currentY + y < ROWS && currentX + x >= 0 && currentX + x < COLS) {
+                         // 임시로 9로 표시하여 현재 블록임을 나타냄
+                        tempBoard[currentY + y][currentX + x] = 9; 
+                    }
+                }
+            }
+        }
+    }
+    
+    // 콘솔 출력 (9는 현재 블록, 1은 고정된 블록)
+    console.log(`\n--- Game Board --- (Y: ${currentY}, X: ${currentX})`);
+    tempBoard.forEach(row => console.log(row.map(cell => cell === 9 ? '◼' : (cell === 1 ? '■' : '□')).join(' ')));
+    console.log('------------------');
+}
+
+
+/**
+ * 1. 새로운 블록 생성 및 배치
+ */
+function generatePiece() {
+    const shapeIndex = Math.floor(Math.random() * SHAPES.length);
+    currentPiece = SHAPES[shapeIndex];
+    currentColor = COLORS[shapeIndex];
+    // 보드 중앙 상단에서 시작
+    currentX = Math.floor(COLS / 2) - Math.floor(currentPiece[0].length / 2);
+    currentY = 0; 
+    
+    // 게임 오버 확인 (새 블록이 생성될 위치에 이미 블록이 있다면)
+    if (!isValidMove(currentX, currentY, currentPiece)) {
+        console.log("!!! GAME OVER !!!");
+        currentPiece = null;
+        return false;
+    }
+    return true;
+}
+
+/**
+ * 2. 이동 및 회전의 유효성 검사
+ * 경계를 벗어나거나, 이미 고정된 블록과 겹치는지 확인
+ */
+function isValidMove(newX, newY, piece) {
+    for (let y = 0; y < piece.length; y++) {
+        for (let x = 0; x < piece[y].length; x++) {
+            if (piece[y][x] === 1) {
+                const boardX = newX + x;
+                const boardY = newY + y;
+                
+                // 1. 수평 경계 확인
+                if (boardX < 0 || boardX >= COLS) return false;
+                
+                // 2. 수직 경계 확인 (바닥)
+                if (boardY >= ROWS) return false;
+                
+                // 3. 고정된 블록과의 충돌 확인
+                // (Y 좌표가 보드 내부이고, 해당 위치에 이미 블록이 고정되어 있다면)
+                if (boardY >= 0 && board[boardY][boardX] !== 0) return false;
+            }
+        }
+    }
+    return true;
+}
+
+/**
+ * 3. 블록 회전 로직 (90도 시계 방향)
+ * SRS 로직은 제외된 단순 회전입니다.
+ */
+function rotatePiece() {
+    if (!currentPiece) return;
+
+    // 새로운 회전된 모양을 저장할 배열
+    const newPiece = [];
+    for (let i = 0; i < currentPiece[0].length; i++) {
+        newPiece[i] = [];
+        for (let j = 0; j < currentPiece.length; j++) {
+            newPiece[i][j] = currentPiece[currentPiece.length - 1 - j][i];
+        }
+    }
+
+    if (isValidMove(currentX, currentY, newPiece)) {
+        currentPiece = newPiece;
+    } else {
+        console.log("회전 불가: 충돌 또는 경계");
+    }
+}
+
+/**
+ * 4. 블록 고정 (Lock)
+ * 블록을 보드 데이터에 영구적으로 기록
+ */
+function lockPiece() {
+    for (let y = 0; y < currentPiece.length; y++) {
+        for (let x = 0; x < currentPiece[y].length; x++) {
+            if (currentPiece[y][x] === 1) {
+                // 현재 블록의 색상/ID로 보드 셀을 채움 (1로 단순화)
+                board[currentY + y][currentX + x] = 1; 
+            }
+        }
+    }
+    checkClearLines();
+    generatePiece();
+}
+
+/**
+ * 5. 블록 하강 (Drop)
+ * 중력 또는 소프트 드롭 기능
+ */
+function drop() {
+    if (!currentPiece) return;
+
+    if (isValidMove(currentX, currentY + 1, currentPiece)) {
+        currentY++; // 한 칸 아래로 이동
+    } else {
+        // 더 이상 아래로 이동 불가 = 고정
+        lockPiece(); 
+    }
+}
+
+/**
+ * 6. 줄 제거 (Line Clear)
+ */
+function checkClearLines() {
+    for (let y = ROWS - 1; y >= 0; y--) {
+        // 해당 줄의 모든 칸이 채워져 있는지 확인
+        if (board[y].every(cell => cell !== 0)) {
+            // 줄 제거
+            console.log(`--- Line Cleared at Row ${y} ---`);
+            
+            // 윗줄들을 한 칸씩 내림
+            for (let k = y; k > 0; k--) {
+                board[k] = board[k - 1];
+            }
+            // 가장 윗줄을 빈 줄로 만듦
+            board[0] = Array(COLS).fill(0);
+            
+            // 줄이 제거되었으므로 현재 줄(y)을 다시 확인하기 위해 y 증가
+            y++; 
+        }
+    }
+}
+
+// ===================================
+// 3. 사용자 입력 및 테스트 실행
+// ===================================
+
+/**
+ * 키보드 이벤트 처리 함수
+ * (실제 HTML에서는 document.addEventListener('keydown', handleKeyInput) 사용)
+ */
+function handleKeyInput(key) {
+    if (!currentPiece) return;
+    
+    let newX = currentX;
+    let newY = currentY;
+
+    switch (key.toLowerCase()) {
+        case 'left':
+        case 'a':
+            newX = currentX - 1;
+            break;
+        case 'right':
+        case 'd':
+            newX = currentX + 1;
+            break;
+        case 'down':
+        case 's':
+            newY = currentY + 1; // 소프트 드롭
+            break;
+        case 'up':
+        case 'w':
+        case 'r':
+            rotatePiece(); // 회전
+            printBoard();
+            return;
+        case 'space':
+            // 하드 드롭 (바닥에 닿을 때까지 이동)
+            while (isValidMove(currentX, currentY + 1, currentPiece)) {
+                currentY++;
+            }
+            lockPiece();
+            printBoard();
+            return;
+        default:
+            return;
+    }
+    
+    // 유효하면 위치 업데이트
+    if (isValidMove(newX, newY, currentPiece)) {
+        currentX = newX;
+        currentY = newY;
+    } else if (key.toLowerCase() === 's' || key.toLowerCase() === 'down') {
+        // 아래로 이동이 불가하면 고정
+        lockPiece();
+    }
+    
+    printBoard();
+}
+
+// -----------------------------------
+// 게임 시작 및 테스트 실행
+// -----------------------------------
+
+console.log("테트리스 로직 테스트 시작! (5초마다 자동 하강)");
+generatePiece();
+printBoard();
+
+// 5초마다 자동으로 블록이 하강하는 루프 설정
+const gameLoop = setInterval(() => {
+    if (!currentPiece) {
+        clearInterval(gameLoop);
+        console.log("게임 루프 종료.");
+        return;
+    }
+    drop();
+    printBoard();
+}, 5000); // 5000ms = 5초마다 자동 하강 (테스트 용)
+
+// --- 테스트를 위한 입력 예시 (크롬 개발자 도구 콘솔에 입력해 보세요) ---
+// handleKeyInput('a');    // 왼쪽 이동
+// handleKeyInput('d');    // 오른쪽 이동
+// handleKeyInput('s');    // 아래로 한 칸 이동 (소프트 드롭)
+// handleKeyInput('r');    // 회전
+// handleKeyInput('space'); // 하드 드롭 (즉시 고정)
